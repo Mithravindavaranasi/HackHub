@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Document, Conflict, Report, UsageStats } from '../types';
+import { analyzeDocumentsForContradictions } from '../utils/textAnalysis';
 
 const COST_PER_DOCUMENT = 2.50;
 const COST_PER_REPORT = 5.00;
@@ -49,167 +50,75 @@ export const useDocuments = () => {
     
     setLoading(true);
     
-    // Simulate AI analysis with realistic conflicts
+    // Real document analysis
     await new Promise(resolve => setTimeout(resolve, 2000));
     
-    const mockConflicts: Conflict[] = [
-      {
-        id: '1',
-        type: 'contradiction',
-        severity: 'high',
-        documents: [documents[0]?.name, documents[1]?.name].filter(Boolean),
-        description: 'Direct contradiction in submission deadlines',
-        suggestions: [
-          'Establish a single, authoritative deadline policy',
-          'Create exception handling procedures for different contexts',
-          'Update all documents to reflect the same deadline',
-          'Add clarification for emergency vs. regular submissions'
-        ],
-        conflictingText: [
-          {
-            document: documents[0]?.name || 'Project Guidelines',
-            text: 'All project submissions must be completed before 10:00 PM on the due date',
-            context: 'Section 3.2: Submission Requirements - Standard project deadline policy'
-          },
-          {
-            document: documents[1]?.name || 'Student Handbook',
-            text: 'Students have until 11:59 PM (midnight) to submit their assignments',
-            context: 'Chapter 5: Academic Policies - General assignment submission rules'
-          }
-        ]
-      },
-      {
-        id: '2',
-        type: 'contradiction',
-        severity: 'high',
-        documents: [documents[0]?.name, documents[1]?.name].filter(Boolean),
-        description: 'Conflicting notice period requirements for employment termination',
-        suggestions: [
-          'Standardize notice periods across all employment documents',
-          'Specify different notice periods for different employee levels',
-          'Create a unified HR policy document',
-          'Legal review of employment contract terms'
-        ],
-        conflictingText: [
-          {
-            document: documents[0]?.name || 'Employment Contract',
-            text: 'Employee must provide one (1) month written notice before resignation',
-            context: 'Section 8: Termination Clause - Legal binding requirement'
-          },
-          {
-            document: documents[1]?.name || 'HR Handbook',
-            text: 'Two weeks notice is required for all resignations',
-            context: 'Page 23: Resignation Process - Standard company policy'
-          }
-        ]
-      },
-      {
-        id: '3',
-        type: 'inconsistency',
-        severity: 'medium',
-        documents: [documents[0]?.name].filter(Boolean),
-        description: 'Inconsistent attendance requirements within the same document',
-        suggestions: [
-          'Clarify which attendance percentage applies to which situations',
-          'Create separate policies for regular vs. exceptional circumstances',
-          'Add context-specific attendance requirements',
-          'Review with academic standards committee'
-        ],
-        conflictingText: [
-          {
-            document: documents[0]?.name || 'Academic Policy',
-            text: 'Students must maintain a minimum of 75% attendance to be eligible for examinations',
-            context: 'Section 4.1: Regular Course Requirements - Standard attendance policy'
-          },
-          {
-            document: documents[0]?.name || 'Academic Policy',
-            text: 'In exceptional circumstances, students with at least 65% attendance may be considered',
-            context: 'Section 4.3: Exception Handling - Special consideration clause'
-          }
-        ]
-      },
-      {
-        id: '4',
-        type: 'overlap',
-        severity: 'medium',
-        documents: [documents[1]?.name, documents[2]?.name].filter(Boolean),
-        description: 'Overlapping but inconsistent late submission penalty policies',
-        suggestions: [
-          'Create a unified penalty structure',
-          'Specify which penalty applies in different contexts',
-          'Establish clear escalation procedures',
-          'Add grace period definitions'
-        ],
-        conflictingText: [
-          {
-            document: documents[1]?.name || 'Course Syllabus',
-            text: 'Late submissions will incur a 10% penalty per day',
-            context: 'Assessment Policy: Daily penalty for late work'
-          },
-          {
-            document: documents[2]?.name || 'Department Rules',
-            text: 'Late assignments receive a flat 25% deduction regardless of delay duration',
-            context: 'Academic Standards: Uniform late penalty across all courses'
-          }
-        ]
-      },
-      {
-        id: '5',
-        type: 'contradiction',
-        severity: 'low',
-        documents: [documents[0]?.name, documents[1]?.name].filter(Boolean),
-        description: 'Minor discrepancy in office hours scheduling',
-        suggestions: [
-          'Synchronize office hour schedules across all documents',
-          'Create a master schedule reference',
-          'Add contact information for schedule updates',
-          'Implement automatic schedule synchronization'
-        ],
-        conflictingText: [
-          {
-            document: documents[0]?.name || 'Faculty Handbook',
-            text: 'Office hours: Monday-Wednesday 2:00-4:00 PM',
-            context: 'Faculty Schedule: Regular consultation hours'
-          },
-          {
-            document: documents[1]?.name || 'Student Guide',
-            text: 'Professor available: Monday-Wednesday 2:00-3:30 PM',
-            context: 'Contact Information: Student consultation times'
-          }
-        ]
-      },
-      {
-        id: '6',
-        type: 'inconsistency',
-        severity: 'high',
-        documents: [documents[1]?.name, documents[2]?.name].filter(Boolean),
-        description: 'Critical inconsistency in grading scale definitions',
-        suggestions: [
-          'Establish institution-wide grading standards',
-          'Create authoritative grading scale document',
-          'Train faculty on consistent grading practices',
-          'Implement grade standardization review process'
-        ],
-        conflictingText: [
-          {
-            document: documents[1]?.name || 'Course Catalog',
-            text: 'A grade: 90-100%, B grade: 80-89%, C grade: 70-79%',
-            context: 'Grading System: Standard percentage-based grading scale'
-          },
-          {
-            document: documents[2]?.name || 'Assessment Guidelines',
-            text: 'A grade: 85-100%, B grade: 75-84%, C grade: 65-74%',
-            context: 'Evaluation Criteria: Alternative grading scale for assessments'
-          }
-        ]
-      }
-    ];
+    // Analyze the actual document content
+    const documentData = documents.map(doc => ({
+      name: doc.name,
+      content: doc.content
+    }));
+    
+    const contradictionMatches = analyzeDocumentsForContradictions(documentData);
+    
+    // Convert analysis results to Conflict format
+    const detectedConflicts: Conflict[] = contradictionMatches.map((match, index) => ({
+      id: (index + 1).toString(),
+      type: match.type,
+      severity: match.severity,
+      documents: [match.document1, match.document2],
+      description: generateConflictDescription(match),
+      suggestions: generateSuggestions(match),
+      conflictingText: [
+        {
+          document: match.document1,
+          text: match.text1,
+          context: match.context1
+        },
+        {
+          document: match.document2,
+          text: match.text2,
+          context: match.context2
+        }
+      ]
+    }));
 
-    setConflicts(mockConflicts);
+    setConflicts(detectedConflicts);
     setLoading(false);
     
-    return mockConflicts;
+    return detectedConflicts;
   }, [documents]);
+
+  const generateConflictDescription = (match: any) => {
+    if (match.text1.includes('%') && match.text2.includes('%')) {
+      return 'Conflicting percentage requirements found between documents';
+    }
+    if (match.text1.match(/\d{1,2}:\d{2}/) && match.text2.match(/\d{1,2}:\d{2}/)) {
+      return 'Different time specifications found in similar contexts';
+    }
+    if (match.text1.includes('required') || match.text2.includes('required')) {
+      return 'Contradictory requirement statements detected';
+    }
+    return 'Potential contradiction detected between document statements';
+  };
+
+  const generateSuggestions = (match: any) => {
+    const suggestions = [
+      'Review both documents for consistency',
+      'Establish which document takes precedence',
+      'Update conflicting information to match',
+      'Add clarification notes to resolve ambiguity'
+    ];
+    
+    if (match.text1.includes('%') && match.text2.includes('%')) {
+      suggestions.push('Standardize percentage requirements across all documents');
+    }
+    if (match.text1.match(/\d{1,2}:\d{2}/) && match.text2.match(/\d{1,2}:\d{2}/)) {
+      suggestions.push('Synchronize time specifications in all related documents');
+    }
+    
+    return suggestions;
+  };
 
   const generateReport = useCallback(async (conflictsToReport: Conflict[]) => {
     const report: Report = {
